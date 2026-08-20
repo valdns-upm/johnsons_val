@@ -1,0 +1,26 @@
+# Métadonnées de sauvegarde des anciens dépôts
+.local-git-history/
+
+# Environnement et caches Python
+**/__pycache__/
+*.pyc
+.env
+.venv/
+.vscode/
+
+# Données et résultats générés localement
+raw data/
+2019018-Kriging/
+**/data/raw/
+**/data/processed/
+**/outputs/
+**/results/
+
+# Fichiers locaux liés à Elmer/Ice
+docu_inv_johnsons/*.dat
+docu_inv_johnsons/*.so
+*.so
+
+# Fichiers propres à l'environnement de travail
+.agents/
+.codex/

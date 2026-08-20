@@ -1,0 +1,531 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!                                       !!
+!! Prueba de Inversión en Hansbreen      !!
+!!                                       !!
+!! José Manuel Muñoz                     !!
+!!                                       !!
+!! Inv Coulomb - velocity: September 08  !! 
+!!                                       !!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Glen law
+! lambda = 10 para probar regularización
+
+check keywords warn
+echo on
+
+!---LUA BEGIN 
+! function Pre(Z) 
+!   if 9.81*1000.0/1.0e6*Z > 0 then return 9.81*1000.0/1.0e6*Z else return 0.0 end 
+! end
+! function Preff(Z) 
+!   if Z < 0 then return (1000.0/1.0e6)*9.81*Z else return 0.0 end 
+! end
+! function PreSeaIce(Z) 
+!   if Z < -4.0 then 
+!     return (1000.0/1.0e6)*9.81*Z 
+!   elseif (Z >= -4.0 and Z < 0) then
+!     return (1000.0/1.0e6)*9.81*Z - 0.0*50.0e-3 
+!   elseif (Z >= 0 and Z <= 0.5) then
+!     return -0.0*50.0e-3
+!   else
+!    return 0.0
+!   end 
+! end 
+!---LUA END 
+
+!! Regularisation parameter
+#Lambda= 0.0 ! try with 0
+!! max. number of iterations
+#niter=100 ! 100 before
+#n=3
+! Define the parameter in MPa - a - m
+#yearinsec = 365.25*24*60*60
+#rhoi = 900.0/(1.0e6*yearinsec^2)
+#rhow = 1000.0/(1.0e6*yearinsec^2) 
+#gravity = -9.81*yearinsec^2
+#mu=1.8e8*1.0e-6*(2.0*yearinsec)^(-1.0/3.0)
+!#mu=2*0.1e3^(-1.0/3.0)
+
+! Prefactor from Cuffey and Paterson (2010) in MPa^{-3} a^{-1}
+#A1 = 2.89165e-13*yearinsec*1.0e18 
+#A2 = 2.42736e-02*yearinsec*1.0e18 
+#Q1 = 60.0e3
+#Q2 = 115.0e3
+
+! Friction Law Sliding Coefficient
+#ng = 3
+!#beta = 20
+#beta = 0.05
+#As = beta^(-ng)
+
+Header
+  Mesh DB "." "PlanMeshSep"
+  Include Path "include"
+  Results Directory "./Results/"
+End
+
+Constants
+  Water Density = Real #rhow
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Simulation
+  Coordinate System  =  Cartesian 3D 
+  Simulation Type = Steady        
+
+  Extruded Mesh Levels = Integer 10
+
+  Steady State Min Iterations = 1
+  Steady State Max Iterations = 17
+
+  Output File = "mitest_steady_inv_sep".result"
+  Post File = "mitest_steady_inv_sep".vtu"
+  Output Coordinates = Logical True
+
+  !! restart True solution
+  !Restart File = "IniInvSep.result"
+  !Restart Variable 1 = Vsx
+  !Restart Variable 2 = Vsy
+  !Restart Variable 3 = velocity 3
+  !Restart Before Initial Conditions = logical True
+
+  max output level = 5 
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! The ice 
+Body 1
+  Equation = 1
+  Body Force = 1
+  Material = 1
+  Initial Condition = 1
+End
+! Top surface
+Body 2
+  Equation = 2
+  Initial Condition = 2
+  Body Force = 2
+End
+! Bottom Surface
+Body 3
+  Equation = 3
+  Initial Condition = 3
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Initial Condition 1
+  Pressure = Real 0.0 
+  Velocity 1 = Real 0.0 
+  Velocity 2 = Real 0.0 
+  Velocity 3 = Real 0.0 
+  Vsx = Equals Velocity 1
+  Vsy = Equals Velocity 2
+
+End
+
+Initial Condition 2
+ Zs = Equals Zs
+End
+
+Initial Condition 3
+!! Slip Coefficient
+ !BetaS = Variable coordinate 1, Coordinate 2
+ !    REAL procedure "MacAyeal_USFs" "betaSquare"
+ ! Initial guess
+ !alpha = Real 0.022
+ alpha = Real 0.0165
+ Zb = Equals Zb
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body Force 1
+  Flow BodyForce 1 = Real 0.0                          
+  Flow BodyForce 2 = Real 0.0
+  Flow BodyForce 3 = Real #gravity 
+End
+
+Body Force 2
+ Adjoint Cost = Variable Velocity 1, Vsx, Velocity 2, Vsy
+   Real MATC "0.5*(tx[0]-tx[1])*(tx[0]-tx[1])+0.5*(tx[2]-tx[3])*(tx[2]-tx[3])"
+
+ Adjoint Cost der 1 = Variable Velocity 1, Vsx
+   Real MATC "(tx[0]-tx[1])"
+
+ Adjoint Cost der 2 = Variable Velocity 2, Vsy
+   Real MATC "(tx[0]-tx[1])"
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Material 1
+  Density = Real #rhoi   
+
+  Viscosity Model = String "glen"
+  Viscosity = 1.0 ! Dummy but avoid warning output
+  Glen Exponent = Real 3.0
+
+  Limit Temperature = Real -10.0
+  Rate Factor 1 = Real #A1
+  Rate Factor 2 = Real #A2
+  Activation Energy 1 = Real #Q1 
+  Activation Energy 2 = Real #Q2  
+  Glen Enhancement Factor = Real 1.0
+  Critical Shear Rate = Real 1.0e-10
+
+  Constant Temperature = Real -1.0
+
+  Cauchy = Logical True 
+
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Solver 1
+  Exec Solver = "Before Simulation"
+  !Exec Solver = "Never"
+  Equation = "Read DEMs"
+
+  Procedure = "ElmerIceSolvers" "Grid2DInterpolator"
+
+  ! Bedrock DEM
+  Variable 1 = String "Zb"
+  Variable 1 data file = File "../Data_extruded_mesh/DEM_Hansbreen_bed.dat"
+  Variable 1 x0 = Real 510261.938
+  Variable 1 y0 = Real 8547626.00
+  Variable 1 lx = Real 8850.0
+  Variable 1 ly = Real 14850.0 
+  Variable 1 Nx = Integer 178
+  Variable 1 Ny = Integer 298
+  Variable 1 Invert = Logical False 
+  Variable 1 Fill = Logical False 
+  Variable 1 Position Tol = Real 1.0e-1
+  Variable 1 No Data = Real -9999.0
+  Variable 1 No Data Tol = Real 1.0 
+
+  ! Surface DEM
+  Variable 2 = String "Zs"
+  Variable 2 data file = File "../Data_extruded_mesh/DEM_Hansbreen_surf.dat"
+  Variable 2 x0 = Real 510261.938
+  Variable 2 y0 = Real 8547626.00
+  Variable 2 lx = Real 8850.0
+  Variable 2 ly = Real 14850.0
+  Variable 2 Nx = Integer 178
+  Variable 2 Ny = Integer 298
+  Variable 2 Invert = Logical False 
+  Variable 2 Fill = Logical False 
+  Variable 2 Position Tol = Real 1.0e-1
+  Variable 2 No Data = Real -9999.0
+  Variable 2 No Data Tol = Real 1.0 
+
+End 
+
+!Solver 2
+!  Exec Solver = "Before Simulation
+!  Equation = Reader
+!  Procedure = "Scattered2DDataInterpolator" "Scattered2DDataInterpolator"
+!  Variable = -nooutput dumy
+!
+!  Variable 1 = File "velocity"
+!  Variable 1 data file = File "../NCsBuenos/comp_e_w188.nc"
+!  Target Variable 1  = String "Vsx"
+!  CheckNaN = Logical True
+!  !Replace NaN by = Real -999999
+!
+!  Variable 2 = File "velocity"
+!  Variable 2 data file = File "../NCsBuenos/comp_n_s188.nc"
+!  Target Variable 2  = String "Vsy"
+!  CheckNaN = Logical True
+!  !Replace NaN by = Real -0.999999
+!  Replace NaN by = Real 0.0
+!
+! exported variables
+!  !Exported Variable 2 = -dofs 2 "Vobs"
+!  Exported Variable 1 = "Vsx"
+!  Exported Variable 2 = "Vsy"
+!End
+
+Solver 2
+  Exec Solver = "Before Simulation"
+  Equation = "ScatteredInter2"
+  Procedure = "./Scattered2DDataInterpolator2" "Scattered2DDataInterpolator"
+
+  Variable 1 = String "Vsx"
+  Variable 1 data file = File "./vels/year_speedXComp_2008_Sep.dat"
+  CheckNaN = Logical True
+  Replace NaN by = Real 0.0
+End
+
+Solver 3  
+  !Exec Solver = "Never"
+  Equation = "MapCoordinate"
+  Procedure = "StructuredMeshMapper" "StructuredMeshMapper"
+
+  Active Coordinate = Integer 3
+  !Top Surface Variable Name = String "Zs"
+
+  Displacement Mode = Logical False
+  Correct Surface = Logical True
+  Minimum Height = Real 1.0
+End
+ 
+Solver 4
+  Equation = "Navier-Stokes"
+
+  !Before Linsolve = "EliminateDirichlet" "EliminateDirichlet"  
+
+  Stabilization Method = String Stabilized
+  Flow Model = Stokes
+
+  Exported Variable 1 = -global CostValue 
+  Exported Variable 2 = -nooutput "Velocityb"
+  Exported Variable 2 DOFs = 4
+  Exported Variable 3 = "Vsx"
+  Exported Variable 4 = "Vsy"
+
+  Linear System Solver = Iterative      
+  Linear System Iterative Method = BICGStab
+   
+  Linear System Preconditioning = ILU0
+  Linear System Convergence Tolerance = Real 1.0e-12
+  Linear System Max Iterations = 50000
+  Linear System Residual Output = 500
+  Linear System Abort Not Converged = True 
+
+  Nonlinear System Max Iterations = 100
+  !Nonlinear System Convergence Tolerance  = 1.9e-04
+  Nonlinear System Convergence Tolerance  = 2.0e-04
+  Nonlinear System Newton After Iterations = 40
+  Nonlinear System Newton After Tolerance = 1.0e-03
+  Nonlinear System Relaxation Factor = 1.00
+
+  Steady State Convergence Tolerance = Real 1.0e-05
+End
+
+Solver 5
+   Exec Solver = "Before Simulation"
+   Equation = "Normal vector"
+   Variable = "Normal Vector"   
+   ! in 3dimensional simulations we have 3 entries
+   Variable DOFs = 3 
+   !NB: does not need to actually solve a matrix
+   !    hence no BW optimization needed
+   Optimize Bandwidth = Logical False 
+   Procedure = "ElmerIceSolvers" "ComputeNormalSolver"
+   ! if set to True, all boundary normals would be computed by default
+   ComputeAll = Logical False
+End
+
+Solver 6
+ Equation = "Cost"
+    procedure = "ElmerIceSolvers" "Adjoint_CostContSolver"
+
+   Cost Variable Name = String "CostValue"  ! Name of Cost Variable
+ ! save the cost as a function of iterations (iterations,Cost,rms=sqrt(2*Cost/Area)
+   Cost Filename = File "Cost_steady.dat"
+
+  Sensitivity Variable Name = String "velocityb"
+
+ !! Exported Variables
+ Exported Variable 1 = Zs
+end
+
+!!!!!!!!!!!!!!!!!!!!!!!!
+!!  Adjoint 
+!!  body 1 (bulk)
+!!!!!!!!!!!!!!!!!!!!!!!!
+Solver 7
+  Equation = "Adjoint"
+  Variable = -nooutput Adjoint
+  Variable Dofs = 4
+
+  procedure = "ElmerIceSolvers" "Adjoint_LinearSolver"
+
+!Name of the flow solution solver
+  Direct Solver Equation Name = string "Navier-Stokes"
+
+! linear system
+  Linear System Solver = Iterative
+  Linear System Iterative Method = GCR
+  Linear System Preconditioning= ILU1
+  Linear System Convergence Tolerance= 1.0e-9
+  !Linear System Convergence Tolerance= 5.0e-07
+  Linear System Max Iterations = 5000
+
+End
+
+Solver 8
+ Equation = "DJDBeta"
+    procedure = "ElmerIceSolvers" "AdjointStokes_GradientBetaSolver"
+
+    Flow Solution Name = String "Flow Solution"
+    Adjoint Solution Name = String "Adjoint"
+    Gradient Variable Name = String "DJDalpha"
+
+  !! Exported Variables
+    Exported Variable 1 = alpha
+    Exported Variable 2 = DJDalpha
+    Exported Variable 3 = Zb
+    Exported Variable 4 = BetaS
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!
+!!  Regularisation
+!!  body 3 (bottom)
+!!!!!!!!!!!!!!!!!!!!!!!!
+Solver 9
+  Equation = "DJDBeta_Reg"
+    procedure = "ElmerIceSolvers" "Adjoint_CostRegSolver"
+
+    Cost Filename=File "CostReg_steady.dat"
+    Optimized Variable Name= String "alpha"
+    Gradient Variable Name= String "DJDalpha"
+    Cost Variable Name= String "CostValue"
+    Lambda= Real #Lambda
+    Reset Cost Value= Logical False  !=> DJDapha already initialized in solver DJDBeta; switch off initialisation to 0 at the beginning of this solver
+    A priori Regularisation= Logical False
+end
+
+!!!!!!!!!!!!!!!!!!!!!!!!
+!!  Optimisation
+!!  body 3 (bottom)
+!!!!!!!!!!!!!!!!!!!!!!!!
+Solver 10
+  Equation = "Optimize_m1qn3"
+  procedure = "ElmerIceSolvers" "Optimize_m1qn3Parallel"
+
+  Cost Variable Name = String "CostValue"
+  Optimized Variable Name = String "alpha"
+  Gradient Variable Name = String "DJDalpha"
+  gradient Norm File = File "GradientNormAdjoint_steady.dat"
+
+  !!
+  Mesh Independent = Logical FALSE
+
+ ! M1QN3 Parameters
+  M1QN3 dxmin = Real 1.0e-10
+  M1QN3 epsg = Real  1.e-6
+  M1QN3 niter = Integer #niter
+  M1QN3 nsim = Integer #niter
+  M1QN3 impres = Integer 5
+  M1QN3 DIS Mode = Logical True
+  M1QN3 df1 = Real 0.5
+  M1QN3 normtype = String "dfn"
+  M1QN3 OutputFile = File  "M1QN3_steady.out"
+  M1QN3 ndz = Integer 20
+
+end
+
+Solver 11
+  Exec Solver = "Before Simulation"
+  Equation = "ScatteredInter3"
+  Procedure = "./Scattered2DDataInterpolator3" "Scattered2DDataInterpolator"
+
+  Variable 1 = String "Vsy"
+  Variable 1 data file = File "./vels/year_speedYComp_2008_Sep.dat"
+  CheckNaN = Logical True
+  Replace NaN by = Real 0.0
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Equation 1
+  Active Solvers(7) = 1 2 3 4 5 7 11
+End
+! Top
+Equation 2
+  Active Solvers(1) = 6
+End
+! bottom
+Equation 3
+  Active Solvers(3) = 8 9 10
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! lateral side of the glacier 
+Boundary Condition 1
+  Target Boundaries = 1
+  Flow Force BC = Logical True
+
+  !Slip Coefficient 2 = Real 0.01
+  !Slip Coefficient 3 = Real 0.01
+
+  !Normal-Tangential Velocity = Logical True
+  !Normal-Tangential Flow Solution = Logical True
+
+  Velocity 1 = Real 0.0
+  Velocity 2 = Real 0.0
+  !Velocity 3 = Real 0.0
+End
+
+! Ice divide
+Boundary Condition 2
+  Target Boundaries = 2
+  Velocity 1 = Real 0.0
+  Velocity 2 = Real 0.0
+End
+
+! lateral side of the glacier 
+Boundary Condition 3
+  Target Boundaries = 3
+  Flow Force BC = Logical True
+
+  !Slip Coefficient 2 = Real 0.01
+  !Slip Coefficient 3 = Real 0.01
+
+  !Normal-Tangential Velocity = Logical True
+  !Normal-Tangential Flow Solution = Logical True
+
+  Velocity 1 = Real 0.0
+  Velocity 2 = Real 0.0
+  !Velocity 3 = Real 0.0
+End
+
+! Front
+Boundary Condition 4
+  Target Boundaries = 4
+  !External Pressure = Variable coordinate 3
+  ! Real LUA "PreSeaIce(tx[0])"
+
+  External Pressure = Variable Coordinate 3
+    Real Procedure "ElmerIceUSF" "SeaPressure"
+  Compute Sea Pressure = Logical True
+!Real LUA "Pre(tx[0])"
+End
+
+! Bedrock 
+Boundary Condition 5
+  Name = "bottom"
+  Target Boundaries = 5
+  Body Id = 3
+  Bottom Surface = Equals Zb   !Structured mesh mapper
+
+! --------- Sliding
+  !Height = Real 0.0
+  ComputeNormal = Logical True ! on this boundary, we want the normals to be computed
+  Flow Force BC = Logical True
+  Normal-Tangential Velocity = Logical True
+  Velocity 1 = Real 0.0e0 
+
+!  Slip Coefficient 2 = Variable alpha
+!    REAL procedure "ElmerIceUSF" "TenPowerA"
+
+!  Slip Coefficient 3 = Variable alpha
+!    REAL procedure "ElmerIceUSF" "TenPowerA"
+
+!  Slip Coefficient derivative = Variable alpha
+!    REAL procedure "ElmerIceUSF" "TenPowerA_d"
+
+  Slip Coefficient 2 =  Variable Coordinate 1
+    Real Procedure "ElmerIceUSF" "Sliding_Weertman"
+  Slip Coefficient 3 =  Variable Coordinate 1
+    Real Procedure "ElmerIceUSF" "Sliding_Weertman"
+    
+  Weertman Friction Coefficient = Equals alpha       
+  Weertman Exponent = Real #1.0/3.0
+  Weertman Linear Velocity = Real 0.1
+
+End
+
+! Upper Surface
+Boundary Condition 6
+  Target Boundaries = 6
+  Body Id = 2
+  Top Surface = Equals Zs
+End
