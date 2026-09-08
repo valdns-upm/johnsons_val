@@ -82,7 +82,9 @@ class Kriging:
                 print(str(i) + ' of ' + str(len(gdata)))
                 # calculate the estimation
                 prediction.append(np.dot(weights.T, residuals))
-            return np.hstack((gdata, prediction))
+            # The third grid column is only a placeholder.  Elmer velocity
+            # observations require exactly X, Y and the kriged value.
+            return np.hstack((gdata[:, :2], prediction))
         else:
             for i, dummy_val in enumerate(gdata):
                 # distance between u and each data point in P
@@ -129,4 +131,4 @@ class Kriging:
                 print(str(i) + ' of ' + str(len(gdata)))
                 # calculate the estimation
                 prediction.append(np.dot(weights.T, residuals))
-            return np.hstack((gdata, prediction))
+            return np.hstack((gdata[:, :2], prediction))

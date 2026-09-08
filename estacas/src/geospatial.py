@@ -27,18 +27,14 @@ def _empty_geodataframe(columns, crs):
 
 # -------------------------------------------------------------------------
 # Layer of historic trajectories, from stake_historic.csv
-# Only keeps stakes that have a prediction, to form a trajectory linestring
+# Only keeps stakes with at least two cleaned points, to form a trajectory
+# linestring
 # -------------------------------------------------------------------------
-def build_historic_layer(cleaned_trajectories, stake_historic, prediction, crs=DEFAULT_CRS):
+def build_historic_layer(cleaned_trajectories, stake_historic, crs=DEFAULT_CRS):
     gpd, LineString, _ = _load_geospatial_dependencies()
-    predicted_stake_ids = set(
-        prediction.loc[prediction["prediction_status"] == "predicted", "stake_id"]
-    )
 
     records = []
     for stake_id, trajectory in cleaned_trajectories.items():
-        if stake_id not in predicted_stake_ids:
-            continue
         if trajectory is None or trajectory.empty:
             continue
 
@@ -162,18 +158,17 @@ def build_validation_observed_points_layer(validation_details, crs=DEFAULT_CRS):
 def export_geopackage(
     cleaned_trajectories,
     stake_historic,
-    prediction,
+    prediction=None,
     validation_details=None,
-    output_path="outputs/results.gpkg",
+    output_path="output/results.gpkg",
     crs=DEFAULT_CRS,
 ):
-    layers = [
-        ("historic", build_historic_layer(cleaned_trajectories, stake_historic, prediction, crs=crs)),
-        ("predictions", build_predictions_layer(prediction, crs=crs)),
-        ("unpredicted_points", build_unpredicted_points_layer(prediction, crs=crs)),
-        ("validation_error_lines", build_validation_error_lines_layer(validation_details, crs=crs)),
-        ("validation_observed_points", build_validation_observed_points_layer(validation_details, crs=crs)),
-    ]
+    layers = [("historic", build_historic_layer(cleaned_trajectories, stake_historic, crs=crs))]
+    if prediction is not None:
+        layers.append(("predictions", build_predictions_layer(prediction, crs=crs)))
+        layers.append(("unpredicted_points", build_unpredicted_points_layer(prediction, crs=crs)))
+    layers.append(("validation_error_lines", build_validation_error_lines_layer(validation_details, crs=crs)))
+    layers.append(("validation_observed_points", build_validation_observed_points_layer(validation_details, crs=crs)))
     layers = [(name, layer) for name, layer in layers if not layer.empty]
 
     if not layers:

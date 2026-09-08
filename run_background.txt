@@ -1,0 +1,24 @@
+Launch (tmux) :
+---
+cd /data/johnsons_val/inversion
+tmux new-session -d -s inversion "ElmerSolver johnsons_inversion.sif > run_full.log 2>&1"
+    = CRÉE UNE SESSION "inversion" DÉTACHÉE QUI RUN EN ARRIÈRE-PLAN
+
+    tmux ls                             : check active sessions
+    tmux attach -t inversion            : se rattache pour voir en direct
+    CTRL+c                              : kill run proprement, si rattaché
+    CTRL+b puis d                       : se détacher sans rien arrêter (une fois rattaché)
+    CTRL+b puis [                       : passe en mode scroll, navigation avec flèches
+    q                                   : quitte mode scroll
+    tmux kill-session -t inversion      : kill session directement, sans se rattacher
+    tmux capture-pane -t inversion -p   : voir ce qui s'affiche sans se rattacher
+
+
+Monitoring (depuis un autre terminal, sans tmux attach) :
+    tail -f run_full.log               # voir défiler en direct (Ctrl+C pour quitter, ne tue pas le calcul)
+    ps aux | grep ElmerSolver          # vérifier que ça tourne encore
+    cat Cost_steady.dat                # historique du coût, une ligne par itération de l'optimiseur
+    grep "ALL DONE" run_full.log       # présent seulement si le run s'est terminé normalement
+
+Kill properly:
+    pkill -f ElmerSolver

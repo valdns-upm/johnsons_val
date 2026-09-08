@@ -4,8 +4,18 @@ Created on Fri Jan 20 20:32:44 2017
 
 @author: DARLINGTON MENSAH
 """
+import sys
+
+# Must run before ClsSemivariogram imports pylab, so its plt.show() calls
+# become no-ops instead of blocking on a display that doesn't exist here.
+if "--headless" in sys.argv:
+    import matplotlib
+    matplotlib.use("Agg")
+
+import argparse
 import tkinter as tk
 from tkinter import filedialog
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import ClsKriging as kg
@@ -97,7 +107,7 @@ class Main:
         data = np.vstack(frames)
         return data[~np.isnan(data).any(axis=1)].astype(float)
 
-    def krige(self, semi_filepath, krige_filepath, prediction_filepath, nug):
+    def krige(self, semi_filepath, krige_filepath, prediction_filepath, nug, interactive=True):
         """
         Function that returns the kriged data for the study data
         INPUT:
@@ -109,28 +119,76 @@ class Main:
         EXTRA INFO:
             If data to be used for obtaining the semivariogram is the same experimental data,
             then semi_filepath = krige_filepath
-        """       
-        var_param = self._sv.Semivariogram(semi_filepath).isotropy(nug) 
-        input("Press Enter to continue...")
+        """
+        var_param = self._sv.Semivariogram(semi_filepath).isotropy(nug)
+        if interactive:
+            input("Press Enter to continue...")
         return self._kg.Kriging().ordinary(var_param, krige_filepath, prediction_filepath)
 
-    def ordinary_Krige(self, semi_filepath, krige_filepath, prediction_filepath):
-       return self.krige(self.importfile(semi_filepath), self.importfile(krige_filepath), self.importfile1(prediction_filepath), 0.1)
+    def ordinary_Krige(self, semi_filepath, krige_filepath, prediction_filepath, interactive=True):
+       return self.krige(
+           self.importfile(semi_filepath),
+           self.importfile(krige_filepath),
+           self.importfile1(prediction_filepath),
+           0.1,
+           interactive=interactive,
+       )
 
-# pylint: disable=C0103
-start_time = time.time()
-main = Main()
 
-interpolate = main.ordinary_Krige(main.openfile(), main.openfile(), main.openfile())
-print("---- %s seconds----" % (time.time() - start_time))
-sample = pd.DataFrame(interpolate)
-save_as_name = filedialog.asksaveasfilename()
-# Always write a plain-text result usable by Elmer/Unix tools.  Excel output
-# remains available when xlsxwriter is installed, for visual inspection.
-sample.to_csv(save_as_name + '.dat', sep='\t', index=False, header=False)
-try:
-    writer = pd.ExcelWriter(save_as_name + '.xlsx', engine='xlsxwriter')
-    sample.to_excel(writer, sheet_name='Kriging', index=False)
-    writer.close()
-except ImportError:
-    print('xlsxwriter is not installed; only the .dat result was written.')
+def _run_headless(args):
+    """Run ordinary kriging for one component (vx or vy), no GUI involved."""
+    main = Main()
+    start_time = time.time()
+    interpolate = main.ordinary_Krige(
+        [args.semi], [args.krige], [args.grid], interactive=False
+    )
+    print("---- %.1f seconds ----" % (time.time() - start_time))
+    sample = pd.DataFrame(interpolate)
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sample.to_csv(output_path, sep="\t", index=False, header=False)
+    print(f"Wrote {len(sample)} points to {output_path}")
+
+
+def _run_interactive():
+    start_time = time.time()
+    main = Main()
+    interpolate = main.ordinary_Krige(main.openfile(), main.openfile(), main.openfile())
+    print("---- %s seconds----" % (time.time() - start_time))
+    sample = pd.DataFrame(interpolate)
+    output_dir = Path(__file__).resolve().parent / "output"
+    output_dir.mkdir(exist_ok=True)
+    save_as_name = filedialog.asksaveasfilename(initialdir=str(output_dir))
+    # Always write a plain-text result usable by Elmer/Unix tools.  Excel output
+    # remains available when xlsxwriter is installed, for visual inspection.
+    sample.to_csv(save_as_name + '.dat', sep='\t', index=False, header=False)
+    try:
+        writer = pd.ExcelWriter(save_as_name + '.xlsx', engine='xlsxwriter')
+        sample.to_excel(writer, sheet_name='Kriging', index=False)
+        writer.close()
+    except ImportError:
+        print('xlsxwriter is not installed; only the .dat result was written.')
+
+
+if __name__ == "__main__":
+    # pylint: disable=C0103
+    parser = argparse.ArgumentParser(
+        description="Ordinary kriging of a scattered X,Y,value field onto a "
+        "prediction grid. Without --headless, opens the original interactive "
+        "file-picker workflow (unchanged)."
+    )
+    parser.add_argument("--headless", action="store_true",
+                         help="Skip all GUI dialogs/plots: read --semi/--krige/--grid, write --output.")
+    parser.add_argument("--semi", help="Data file used to fit the semivariogram (X Y value).")
+    parser.add_argument("--krige", help="Data file used as kriging input (X Y value); usually same as --semi.")
+    parser.add_argument("--grid", help="Prediction grid file (X Y [ignored]).")
+    parser.add_argument("--output", help="Output .dat file path.")
+    cli_args = parser.parse_args()
+
+    if cli_args.headless:
+        missing = [name for name in ("semi", "krige", "grid", "output") if getattr(cli_args, name) is None]
+        if missing:
+            parser.error("--headless requires: " + ", ".join("--" + m for m in missing))
+        _run_headless(cli_args)
+    else:
+        _run_interactive()

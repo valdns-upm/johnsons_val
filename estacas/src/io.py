@@ -1,3 +1,4 @@
+import datetime
 import re
 from pathlib import Path
 
@@ -5,6 +6,9 @@ import pandas as pd
 
 
 def normalize_date_value(value):
+    # Older campaign files store real Excel dates instead of dd-mm-aa text.
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return value
     value = str(value).strip().replace("/", "-")
     match = re.match(r"(\d{2}-\d{2}-)(\d{2})$", value)
     if match:
@@ -184,30 +188,25 @@ def load_single_file(file_path):
     return pd.concat(dfs, ignore_index=True)
 
 
-def load_multiple_files(folder_path):
-    dfs = []
+def _resolve_files(folder_paths):
+    # folder_paths can be a single folder or a list of folders (e.g. several
+    # red_global/campXXXXa dirs feeding one estacas run).
+    if isinstance(folder_paths, (str, Path)):
+        folder_paths = [folder_paths]
 
-    # The historical Johnsons files include both .xls and .xlsx files.
-    files = sorted(
-        list(Path(folder_path).glob("*.xls"))
-        + list(Path(folder_path).glob("*.xlsx"))
-    )
-    for file in files:
-        df = load_single_file(file)
-        dfs.append(df)
+    files = []
+    for folder_path in folder_paths:
+        # The historical Johnsons files include both .xls and .xlsx files.
+        files += list(Path(folder_path).glob("*.xls"))
+        files += list(Path(folder_path).glob("*.xlsx"))
+    return sorted(files)
 
+
+def load_multiple_files(folder_paths):
+    dfs = [load_single_file(file) for file in _resolve_files(folder_paths)]
     return pd.concat(dfs, ignore_index=True)
 
 
-def load_monitoring_metadata(folder_path):
-    dfs = []
-
-    files = sorted(
-        list(Path(folder_path).glob("*.xls"))
-        + list(Path(folder_path).glob("*.xlsx"))
-    )
-    for file in files:
-        df = extract_monitoring_metadata(file)
-        dfs.append(df)
-
+def load_monitoring_metadata(folder_paths):
+    dfs = [extract_monitoring_metadata(file) for file in _resolve_files(folder_paths)]
     return pd.concat(dfs, ignore_index=True)

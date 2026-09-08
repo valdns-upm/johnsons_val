@@ -1,0 +1,6 @@
+! ----- names for bodies -----
+$ Interior = 1
+! ----- names for boundaries -----
+$ roca = 1
+$ div = 2
+$ front = 3

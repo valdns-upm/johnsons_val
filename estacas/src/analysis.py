@@ -21,7 +21,7 @@ def estimate_velocity_components(
 
 # -----------------------------------------------------------------
 # Main function to compute historic statistics for each stake:
-# Merge metadata of stakes with displacement summaries, 
+# Merge metadata of stakes with displacement summaries,
 # compute mean speed, and identify outliers based on segment speeds
 # -----------------------------------------------------------------
 def compute_stake_historic(df, displacements):
@@ -54,7 +54,7 @@ def compute_stake_historic(df, displacements):
                 distance = np.sqrt(dx**2 + dy**2)
                 segment_speed = distance / dt_days
 
-                if segment_speed > 5:  # Threshold for outlier speed in m/day (current: 5 m/day)
+                if segment_speed > 5:  # m/day
                     outlier_stakes.add(stake_id)
                     break
 
@@ -127,6 +127,46 @@ def compute_stake_historic(df, displacements):
     summary = summary[ordered_columns]
 
     return summary
+
+# ---------------------------------------------------------------------
+# Aggregate Johnson displacement segments per stake over a trailing
+# window (e.g. the 3 years preceding target_date), instead of the
+# single latest segment. Smooths out noise from any one interval.
+# ---------------------------------------------------------------------
+def aggregate_window_velocity(displacements, target_date, window_years=3):
+    target_date = pd.Timestamp(target_date)
+    min_segments = window_years - 1
+
+    data = displacements[
+        displacements["glacier"].astype(str).str.lower().eq("johnson")
+        & (displacements["date_end"] <= target_date)
+    ]
+    n_candidates = data["stake_id"].nunique()
+
+    rows = []
+    for stake_id, group in data.groupby("stake_id"):
+        if len(group) < min_segments:
+            continue
+
+        vx, vy = estimate_velocity_components(stake_segments=group)
+        if vx is None or vy is None:
+            continue
+
+        total_dt = group["dt_days"].sum()
+        rows.append({
+            "stake_id": stake_id,
+            "x": (group["x"] * group["dt_days"]).sum() / total_dt,
+            "y": (group["y"] * group["dt_days"]).sum() / total_dt,
+            "vx_m_per_day": vx,
+            "vy_m_per_day": vy,
+            "n_segments": len(group),
+            "window_start": group["date_start"].min(),
+            "window_end": group["date_end"].max(),
+        })
+
+    aggregated = pd.DataFrame(rows)
+    return aggregated, n_candidates, len(aggregated)
+
 
 # -------------------------------------------------------
 # Summarize data availability per campaign for each stake

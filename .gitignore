@@ -13,7 +13,7 @@ raw data/
 2019018-Kriging/
 **/data/raw/
 **/data/processed/
-**/outputs/
+**/output/
 **/results/
 
 # Fichiers locaux liés à Elmer/Ice

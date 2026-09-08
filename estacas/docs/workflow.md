@@ -1,5 +1,5 @@
 workflow.md
-Les fichiers Excel des campagnes sont placés dans data/raw/.
-main.py lit les mesures et reconstruit les trajectoires.
-Les résultats sont écrits dans outputs/.
-Les exports de vitesse destinés au kriging sont produits dans outputs/kriging/.
+Excel files for each campaign are placed in data/raw/.
+main.py reads the measurements and reconstructs trajectories.
+Results are written to output/.
+Point velocity exports (X, Y, vx/vy) are produced in output/ and then consumed by kriging/.

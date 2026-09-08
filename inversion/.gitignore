@@ -1,0 +1,15 @@
+# Elmer run artifacts (regenerated on every run, not source data)
+mesh_Johnson_gmsh_2D_100/
+*.log
+Cost_steady.dat
+CostReg_steady.dat
+GradientNormAdjoint_steady.dat
+M1QN3_steady.out
+
+# results/ is already covered by the repo-root .gitignore (**/results/)
+
+# Run outputs, too large for git (several GB)
+lcurve/
+camp_1517/
+camp_0609/
+camp_0709/
